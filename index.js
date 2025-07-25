@@ -4,6 +4,19 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Função para extrair e limpar o número de telefone
+function extrairTelefoneValido(rawTelefones) {
+  const numeros = rawTelefones
+    .split(",")
+    .map(n => n.replace(/\D/g, ""))
+    .filter(n => n.length >= 11);
+
+  const unicos = [...new Set(numeros)];
+  const valido = unicos.find(n => n.length === 13);
+
+  return valido || unicos[0] || null;
+}
+
 app.get("/", async (req, res) => {
   const {
     token,
@@ -19,14 +32,19 @@ app.get("/", async (req, res) => {
     return res.status(400).send("Parâmetros obrigatórios ausentes.");
   }
 
+  const numeroFormatado = extrairTelefoneValido(phoneNumber);
+  if (!numeroFormatado) {
+    return res.status(400).send("Nenhum telefone válido encontrado.");
+  }
+
   const automationFlag = automationOnHold === "true";
 
   try {
-    // 1. Envia para API do Xano
+    // 1. Envia solicitação para a API de pausa
     const pauseResponse = await axios.post(
       "https://xltw-api6-8lww.b2.xano.io/api:5ONttZdQ/contatos",
       {
-        phoneNumber,
+        phoneNumber: numeroFormatado,
         automationOnHold: automationFlag
       },
       {
@@ -38,11 +56,9 @@ app.get("/", async (req, res) => {
     );
 
     const retorno = pauseResponse.data;
-
-    // 2. Formata o comentário com retorno
     const {
       nome = "Não informado",
-      numero_tel = phoneNumber,
+      numero_tel = numeroFormatado,
       whatsapp_id = "N/A",
       email = "Não informado",
       status = "Sem status",
@@ -62,7 +78,6 @@ app.get("/", async (req, res) => {
 🔁 *Código original da resposta da API:*
 ${JSON.stringify(retorno)}`;
 
-    // 3. Envia comentário ao Bitrix
     const bitrixURL = `https://${bitrixDomain}/rest/${bitrixUser}/${bitrixToken}/crm.timeline.comment.add.json`;
 
     await axios.post(bitrixURL, {
