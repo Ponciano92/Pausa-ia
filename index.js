@@ -5,20 +5,28 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 app.get("/", async (req, res) => {
-  const { token, phoneNumber, automationOnHold } = req.query;
+  const {
+    token,
+    phoneNumber,
+    automationOnHold,
+    bitrixToken,
+    bitrixUser,
+    bitrixDomain,
+    dealId
+  } = req.query;
 
-  if (!token || !phoneNumber) {
+  if (!token || !phoneNumber || !automationOnHold || !bitrixToken || !bitrixUser || !bitrixDomain || !dealId) {
     return res.status(400).send("Parâmetros obrigatórios ausentes.");
   }
 
-  // Converte "true"/"false" (string) para booleano real
   const automationFlag = automationOnHold === "true";
 
   try {
-    const response = await axios.post(
+    // 1. Envia para API do Xano
+    const pauseResponse = await axios.post(
       "https://xltw-api6-8lww.b2.xano.io/api:5ONttZdQ/contatos",
       {
-        phoneNumber: phoneNumber,
+        phoneNumber,
         automationOnHold: automationFlag
       },
       {
@@ -29,9 +37,46 @@ app.get("/", async (req, res) => {
       }
     );
 
-    res.status(200).send(`Sucesso: ${JSON.stringify(response.data)}`);
+    const retorno = pauseResponse.data;
+
+    // 2. Formata o comentário com retorno
+    const {
+      nome = "Não informado",
+      numero_tel = phoneNumber,
+      whatsapp_id = "N/A",
+      email = "Não informado",
+      status = "Sem status",
+      fluxo = {}
+    } = retorno;
+
+    const comentario = `🛑 *API de Pausa Executada com Sucesso*
+📱 Telefone: ${numero_tel}
+⏸️ Pausado: ${automationFlag ? "✅" : "❌"}
+
+👤 Nome: ${nome}
+📞 WhatsApp ID: ${whatsapp_id}
+📧 E-mail: ${email || "(não informado)"}
+📌 Status: ${status}
+🔄 Fluxo Ativo: ${fluxo.ativo ? "Ativo ✅" : "Inativo ❌"}
+
+🔁 *Código original da resposta da API:*
+${JSON.stringify(retorno)}`;
+
+    // 3. Envia comentário ao Bitrix
+    const bitrixURL = `https://${bitrixDomain}/rest/${bitrixUser}/${bitrixToken}/crm.timeline.comment.add.json`;
+
+    await axios.post(bitrixURL, {
+      fields: {
+        ENTITY_ID: dealId,
+        ENTITY_TYPE: "deal",
+        COMMENT: comentario
+      }
+    });
+
+    res.status(200).send("Pausa executada e comentário adicionado com sucesso.");
   } catch (error) {
-    res.status(500).send(`Erro ao enviar para Xano: ${error.message}`);
+    console.error("Erro:", error.response?.data || error.message);
+    res.status(500).send(`Erro: ${error.response?.data || error.message}`);
   }
 });
 
