@@ -4,15 +4,16 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Função para extrair e limpar o número de telefone
+// Extrai um número válido do campo "Telefone", tratando espaços e formatos mistos
 function extrairTelefoneValido(rawTelefones) {
   const numeros = rawTelefones
+    .replace(/\s/g, "") // remove espaços
     .split(",")
-    .map(n => n.replace(/\D/g, ""))
+    .map(n => n.replace(/\D/g, "")) // limpa tudo que não for número
     .filter(n => n.length >= 11);
 
   const unicos = [...new Set(numeros)];
-  const valido = unicos.find(n => n.length === 13);
+  const valido = unicos.find(n => n.length === 13); // busca o formato ideal
 
   return valido || unicos[0] || null;
 }
@@ -40,7 +41,6 @@ app.get("/", async (req, res) => {
   const automationFlag = automationOnHold === "true";
 
   try {
-    // 1. Envia solicitação para a API de pausa
     const pauseResponse = await axios.post(
       "https://xltw-api6-8lww.b2.xano.io/api:5ONttZdQ/contatos",
       {
