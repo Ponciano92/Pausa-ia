@@ -4,21 +4,23 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Extrai um número válido do campo "Telefone", tratando espaços e formatos mistos
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Função para extrair e limpar o número de telefone
 function extrairTelefoneValido(rawTelefones) {
   const numeros = rawTelefones
-    .replace(/\s/g, "") // remove espaços
     .split(",")
-    .map(n => n.replace(/\D/g, "")) // limpa tudo que não for número
+    .map(n => n.replace(/\D/g, ""))
     .filter(n => n.length >= 11);
 
   const unicos = [...new Set(numeros)];
-  const valido = unicos.find(n => n.length === 13); // busca o formato ideal
+  const valido = unicos.find(n => n.length === 13);
 
   return valido || unicos[0] || null;
 }
 
-app.get("/", async (req, res) => {
+app.post("/", async (req, res) => {
   const {
     token,
     phoneNumber,
@@ -27,7 +29,7 @@ app.get("/", async (req, res) => {
     bitrixUser,
     bitrixDomain,
     dealId
-  } = req.query;
+  } = req.body;
 
   if (!token || !phoneNumber || !automationOnHold || !bitrixToken || !bitrixUser || !bitrixDomain || !dealId) {
     return res.status(400).send("Parâmetros obrigatórios ausentes.");
