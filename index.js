@@ -4,11 +4,9 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware para aceitar JSON e x-www-form-urlencoded (caso um dia use body também)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Lógica para extrair número de telefone válido
 function extrairTelefoneValido(rawTelefones) {
   const numeros = rawTelefones
     .split(",")
@@ -17,11 +15,9 @@ function extrairTelefoneValido(rawTelefones) {
 
   const unicos = [...new Set(numeros)];
   const valido = unicos.find(n => n.length === 13);
-
   return valido || unicos[0] || null;
 }
 
-// ⚠️ ALTERADO DE GET PARA POST
 app.post("/", async (req, res) => {
   const {
     token,
@@ -30,11 +26,12 @@ app.post("/", async (req, res) => {
     bitrixToken,
     bitrixUser,
     bitrixDomain,
-    dealId
-  } = req.query; // continua pegando pela query string
+    dealId,
+    details
+  } = req.query;
 
-  if (!token || !phoneNumber || !automationOnHold || !bitrixToken || !bitrixUser || !bitrixDomain || !dealId) {
-    return res.status(400).send("Parâmetros obrigatórios ausentes.");
+  if (!token || !phoneNumber) {
+    return res.status(400).send("Parâmetros obrigatórios ausentes: token e phoneNumber.");
   }
 
   const numeroFormatado = extrairTelefoneValido(phoneNumber);
@@ -42,15 +39,21 @@ app.post("/", async (req, res) => {
     return res.status(400).send("Nenhum telefone válido encontrado.");
   }
 
-  const flag = automationOnHold === "true";
+  const payloadIA = {};
+  payloadIA.phoneNumber = numeroFormatado;
+
+  if (automationOnHold !== undefined) {
+    payloadIA.automationOnHold = automationOnHold === "true";
+  }
+
+  if (details) {
+    payloadIA.details = details;
+  }
 
   try {
     const resposta = await axios.post(
       "https://xltw-api6-8lww.b2.xano.io/api:5ONttZdQ/contatos",
-      {
-        phoneNumber: numeroFormatado,
-        automationOnHold: flag
-      },
+      payloadIA,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -69,9 +72,10 @@ app.post("/", async (req, res) => {
       fluxo = {}
     } = retorno;
 
-    const comentario = `🛑 *API de Pausa Executada com Sucesso*
+    const comentario = `🛑 *API Executada com Sucesso*
 📱 Telefone: ${numero_tel}
-⏸️ Pausado: ${flag ? "✅" : "❌"}
+${automationOnHold !== undefined ? `⏸️ Pausado: ${automationOnHold === "true" ? "✅" : "❌"}\n` : ""}
+📝 Detalhes: ${details || "N/A"}
 
 👤 Nome: ${nome}
 📞 WhatsApp ID: ${whatsapp_id}
@@ -82,17 +86,25 @@ app.post("/", async (req, res) => {
 🔁 *Código original da resposta da API:*
 ${JSON.stringify(retorno)}`;
 
-    const urlBitrix = `https://${bitrixDomain}/rest/${bitrixUser}/${bitrixToken}/crm.timeline.comment.add.json`;
+    // Se os dados do Bitrix estiverem completos, envia o comentário
+    const dadosBitrixPresentes = bitrixToken && bitrixUser && bitrixDomain && dealId;
 
-    await axios.post(urlBitrix, {
-      fields: {
-        ENTITY_ID: dealId,
-        ENTITY_TYPE: "deal",
-        COMMENT: comentario
-      }
+    if (dadosBitrixPresentes) {
+      const urlBitrix = `https://${bitrixDomain}/rest/${bitrixUser}/${bitrixToken}/crm.timeline.comment.add.json`;
+      await axios.post(urlBitrix, {
+        fields: {
+          ENTITY_ID: dealId,
+          ENTITY_TYPE: "deal",
+          COMMENT: comentario
+        }
+      });
+    }
+
+    res.status(200).json({
+      mensagem: `Execução concluída com sucesso.`,
+      bitrix: dadosBitrixPresentes ? "Comentário enviado" : "Comentário não enviado (dados incompletos)",
+      retorno
     });
-
-    res.status(200).send("Pausa executada e comentário adicionado com sucesso.");
   } catch (err) {
     console.error("Erro:", err.response?.data || err.message);
     res.status(500).send(`Erro: ${err.response?.data || err.message}`);
