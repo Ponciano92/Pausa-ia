@@ -4,11 +4,11 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware para garantir que aceita parâmetros com espaços ou vírgulas
+// Middleware para aceitar JSON e x-www-form-urlencoded (caso um dia use body também)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Lógica para pegar um número válido entre vários enviados
+// Lógica para extrair número de telefone válido
 function extrairTelefoneValido(rawTelefones) {
   const numeros = rawTelefones
     .split(",")
@@ -21,7 +21,8 @@ function extrairTelefoneValido(rawTelefones) {
   return valido || unicos[0] || null;
 }
 
-app.get("/", async (req, res) => {
+// ⚠️ ALTERADO DE GET PARA POST
+app.post("/", async (req, res) => {
   const {
     token,
     phoneNumber,
@@ -30,7 +31,7 @@ app.get("/", async (req, res) => {
     bitrixUser,
     bitrixDomain,
     dealId
-  } = req.query;
+  } = req.query; // continua pegando pela query string
 
   if (!token || !phoneNumber || !automationOnHold || !bitrixToken || !bitrixUser || !bitrixDomain || !dealId) {
     return res.status(400).send("Parâmetros obrigatórios ausentes.");
