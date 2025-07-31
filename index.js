@@ -19,19 +19,24 @@ function extrairTelefoneValido(rawTelefones) {
 }
 
 app.post("/", async (req, res) => {
-  const {
-    token,
-    phoneNumber,
-    automationOnHold,
-    bitrixToken,
-    bitrixUser,
-    bitrixDomain,
-    dealId,
-    details
-  } = req.query;
+  const query = req.query;
+  const headers = req.headers;
 
-  if (!token || !phoneNumber) {
-    return res.status(400).send("Parâmetros obrigatórios ausentes: token e phoneNumber.");
+  // ✅ Pega o token da IA: primeiro do header, se não, da query
+  const tokenIA = headers["authorization"]?.replace("Bearer ", "") || query.token;
+
+  // ✅ Dados do Bitrix: headers > query
+  const bitrixToken = headers["bitrix-token"] || query.bitrixToken;
+  const bitrixUser = headers["bitrix-user"] || query.bitrixUser;
+  const bitrixDomain = headers["bitrix-domain"] || query.bitrixDomain;
+  const dealId = headers["deal-id"] || query.dealId;
+
+  const phoneNumber = query.phoneNumber;
+  const automationOnHold = query.automationOnHold;
+  const details = query.details;
+
+  if (!tokenIA || !phoneNumber) {
+    return res.status(400).send("Parâmetros obrigatórios ausentes: token da IA e phoneNumber.");
   }
 
   const numeroFormatado = extrairTelefoneValido(phoneNumber);
@@ -39,8 +44,7 @@ app.post("/", async (req, res) => {
     return res.status(400).send("Nenhum telefone válido encontrado.");
   }
 
-  const payloadIA = {};
-  payloadIA.phoneNumber = numeroFormatado;
+  const payloadIA = { phoneNumber: numeroFormatado };
 
   if (automationOnHold !== undefined) {
     payloadIA.automationOnHold = automationOnHold === "true";
@@ -56,7 +60,7 @@ app.post("/", async (req, res) => {
       payloadIA,
       {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${tokenIA}`,
           "Content-Type": "application/json"
         }
       }
@@ -86,7 +90,7 @@ ${automationOnHold !== undefined ? `⏸️ Pausado: ${automationOnHold === "true
 🔁 *Código original da resposta da API:*
 ${JSON.stringify(retorno)}`;
 
-    // Se os dados do Bitrix estiverem completos, envia o comentário
+    // Verifica se deve comentar no Bitrix
     const dadosBitrixPresentes = bitrixToken && bitrixUser && bitrixDomain && dealId;
 
     if (dadosBitrixPresentes) {
@@ -101,7 +105,7 @@ ${JSON.stringify(retorno)}`;
     }
 
     res.status(200).json({
-      mensagem: `Execução concluída com sucesso.`,
+      mensagem: "Execução concluída com sucesso.",
       bitrix: dadosBitrixPresentes ? "Comentário enviado" : "Comentário não enviado (dados incompletos)",
       retorno
     });
